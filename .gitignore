@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local environment variables and credentials
+.env
+.env.*
+!.env.example
+.aws/
+credentials
+*.pem
+*.key
+*.p12
+
+# Terraform working files, local values, plans, and state
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+
+# Generated build artifacts
+consumer.zip
+generated-flink.sql
+
+# Local editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

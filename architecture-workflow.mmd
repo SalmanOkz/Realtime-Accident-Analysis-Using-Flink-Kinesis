@@ -1,0 +1,29 @@
+flowchart TB
+    API[Live Traffic API] --> INGEST[Scheduled Ingestion Lambda]
+    SECRETS[Secrets Manager] --> INGEST
+    INGEST --> RAW[(S3 Raw Archive)]
+    INGEST --> DEDUPE[(DynamoDB Dedupe State)]
+    INGEST --> INPUT[Kinesis Input Stream]
+
+    INPUT --> FLINK[Managed Apache Flink]
+    FLINK --> OUTPUT[Kinesis Enriched Stream]
+    FLINK --> QUARANTINE[(S3 Quarantine)]
+
+    OUTPUT --> CONSUMER[Consumer Lambda]
+    CONSUMER --> CURRENT[(DynamoDB Current Incidents)]
+    CONSUMER --> ALERTSTATE[(DynamoDB Alert State)]
+    CONSUMER --> ALERTS[EventBridge + SNS/Webhooks]
+
+    INPUT --> FIREHOSE[Amazon Data Firehose]
+    FIREHOSE --> CURATED[(S3 Curated Parquet)]
+    CURATED --> GLUE[Glue Catalog]
+    GLUE --> ATHENA[Athena]
+
+    CURRENT --> READ[API Gateway + Read Lambda]
+    ATHENA --> READ
+    READ --> WEB[Live Map and Analytics UI]
+
+    OBS[CloudWatch Logs, Metrics and Alarms] -. monitors .-> INGEST
+    OBS -. monitors .-> FLINK
+    OBS -. monitors .-> CONSUMER
+    OBS -. monitors .-> READ

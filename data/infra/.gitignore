@@ -1,0 +1,9 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+consumer.zip
+generated-flink.sql
+environments/*.tfvars
+!environments/*.tfvars.example
+crash.log

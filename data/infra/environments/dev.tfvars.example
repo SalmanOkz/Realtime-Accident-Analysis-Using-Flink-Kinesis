@@ -1,0 +1,14 @@
+aws_region               = "us-east-1"
+project_name             = "accident-analysis"
+environment              = "dev"
+alert_email              = null
+alert_severity_threshold = 5
+log_retention_days       = 14
+
+# Firehose delivers converted Parquet files after either threshold is reached.
+firehose_buffer_size_mb         = 64
+firehose_buffer_interval_seconds = 60
+
+# Set true only after enabling IAM Identity Center in us-east-1.
+enable_grafana         = false
+grafana_admin_user_ids = []

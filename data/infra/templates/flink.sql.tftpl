@@ -1,0 +1,45 @@
+DROP TABLE IF EXISTS us_accidents_stream;
+
+CREATE TABLE us_accidents_stream (
+  `ID` STRING,
+  `Severity` BIGINT,
+  `Start_Time` TIMESTAMP(3),
+  `End_Time` TIMESTAMP(3),
+  `City` STRING,
+  `County` STRING,
+  `State` STRING,
+  `Weather_Timestamp` TIMESTAMP(3),
+  `Txn_Timestamp` TIMESTAMP(3),
+  WATERMARK FOR `Txn_Timestamp` AS `Txn_Timestamp` - INTERVAL '5' SECOND
+)
+WITH (
+  'connector' = 'kinesis',
+  'stream' = '${input_stream_name}',
+  'aws.region' = '${aws_region}',
+  'scan.stream.initpos' = 'LATEST',
+  'format' = 'json',
+  'json.timestamp-format.standard' = 'ISO-8601',
+  'json.ignore-parse-errors' = 'false'
+);
+
+DROP TABLE IF EXISTS us_accidents_filtered;
+
+CREATE TABLE us_accidents_filtered (
+  `ID` STRING,
+  `Severity` BIGINT,
+  `City` STRING,
+  `County` STRING,
+  `Txn_Timestamp` TIMESTAMP(3)
+)
+WITH (
+  'connector' = 'kinesis',
+  'stream' = '${filtered_stream_name}',
+  'aws.region' = '${aws_region}',
+  'format' = 'json',
+  'json.timestamp-format.standard' = 'ISO-8601'
+);
+
+INSERT INTO us_accidents_filtered
+SELECT `ID`, `Severity`, `City`, `County`, `Txn_Timestamp`
+FROM us_accidents_stream
+WHERE `Severity` > 3;

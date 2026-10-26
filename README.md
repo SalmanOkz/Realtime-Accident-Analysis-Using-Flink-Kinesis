@@ -26,8 +26,16 @@ This Project uses the US car accidents dataset which includes a few of the follo
 
 ➔ Languages - SQL, Python3
 
-➔ Services - AWS S3, AWS Glue, AWS Athena, AWS Cloud9, Apache Flink, Amazon Kinesis, Amazon SNS, AWS Lambda, Amazon CloudWatch, Grafana, Apache Zepplin
+➔ Services - AWS S3, AWS Glue, AWS Athena, Amazon Data Firehose, Apache Flink, Amazon Kinesis, Amazon SNS, Amazon SQS, AWS Lambda, Amazon CloudWatch, Amazon Managed Grafana, Apache Zeppelin, Terraform
 
 **Architecture Diagram**
 
-![Architecture Diagram](https://github.com/aiwithqasim/Realtime-Accident-Analysis-Using-Flink-Kinesis/blob/main/Architecture.jpg)
+![Complete architecture](Complete-Architecture-Clean.png)
+
+## Terraform deployment
+
+The complete deployable environment is defined in [`data/infra/`](data/infra/README.md). It provisions the S3 raw and curated layers, two encrypted Kinesis streams, Firehose JSON-to-Parquet delivery, Glue catalog tables, Athena queries, Lambda consumer, SNS alerts, SQS failure handling, CloudWatch monitoring, optional Managed Grafana, IAM policies, and environment-specific Flink SQL.
+
+Firehose consumes the Flink-enriched stream, so the real-time Lambda path and the historical Athena/Grafana path analyze the same processed events.
+
+For complete Windows installation, AWS authentication, deployment, Flink Studio, verification, troubleshooting, and cleanup instructions, follow [`SETUP_AND_RUN_GUIDE.md`](SETUP_AND_RUN_GUIDE.md).

@@ -1,69 +1,99 @@
-import boto3
+"""Replay accident records from S3 into an Amazon Kinesis data stream."""
+
+import argparse
 import csv
+import io
 import json
-import dateutil.parser as parser
-from time import sleep
-from datetime import datetime
+import os
+import time
+from datetime import datetime, timezone
+
+import boto3
+from dateutil import parser as date_parser
 
 
-# AWS Settings
-s3 = boto3.client('s3', region_name = 'us-east-1')
-s3_resource = boto3.resource('s3', region_name = 'us-east-1')
-kinesis_client = boto3.client('kinesis', region_name='us-east-1')
-
-# Env. variables; i.e. can be OS variables in Lambda
-kinesis_stream_name = 'us-accidents-data-stream-01'
-streaming_partition_key = 'Severity'
+DEFAULT_OBJECT_KEY = "raw/US_Accidents_Dec20_updated_100samples.csv"
+TIMESTAMP_FIELDS = ("Start_Time", "End_Time", "Weather_Timestamp")
 
 
-# Function can be converted to Lambda; 
-#   i.e. by iterating the S3-put events records; e.g. record['s3']['bucket']['name']
-def stream_data_simulator(input_s3_bucket, input_s3_key):
-    s3_bucket = input_s3_bucket
-    s3_key = input_s3_key
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bucket", default=os.getenv("ACCIDENT_SOURCE_BUCKET"))
+    parser.add_argument("--key", default=os.getenv("ACCIDENT_SOURCE_KEY", DEFAULT_OBJECT_KEY))
+    parser.add_argument("--stream", default=os.getenv("KINESIS_INPUT_STREAM"))
+    parser.add_argument("--region", default=os.getenv("AWS_REGION", "us-east-1"))
+    parser.add_argument("--delay-seconds", type=float, default=float(os.getenv("REPLAY_DELAY_SECONDS", "0.25")))
+    parser.add_argument("--repeat", type=int, default=int(os.getenv("REPLAY_REPEAT", "1")))
+    args = parser.parse_args()
 
-    # Read CSV Lines and split the file into lines
-    csv_file = s3_resource.Object(s3_bucket, s3_key)
-    s3_response = csv_file.get()
-    lines = s3_response['Body'].read().decode('utf-8').split('\n')
+    missing = [name for name, value in (("--bucket", args.bucket), ("--stream", args.stream)) if not value]
+    if missing:
+        parser.error(f"Missing required configuration: {', '.join(missing)}")
+    if args.repeat < 1:
+        parser.error("--repeat must be at least 1")
+    if args.delay_seconds < 0:
+        parser.error("--delay-seconds cannot be negative")
+    return args
 
-    for row in csv.DictReader(lines):
+
+def normalize_record(row):
+    record = dict(row)
+    for field in TIMESTAMP_FIELDS:
+        value = record.get(field)
+        if value:
+            record[field] = date_parser.parse(value).isoformat()
+
+    record["Severity"] = int(record["Severity"])
+    record["Txn_Timestamp"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    return record
+
+
+def load_rows(s3_client, bucket, key):
+    response = s3_client.get_object(Bucket=bucket, Key=key)
+    with io.TextIOWrapper(response["Body"], encoding="utf-8-sig", newline="") as body:
+        yield from csv.DictReader(body)
+
+
+def replay_once(s3_client, kinesis_client, bucket, key, stream, delay_seconds):
+    sent = 0
+    failed = 0
+    for row_number, row in enumerate(load_rows(s3_client, bucket, key), start=2):
         try:
-            # Convert to JSON, to make it easier to work in Kinesis Analytics
-            line_json = json.dumps(row)
-            json_load = json.loads(line_json)
+            record = normalize_record(row)
+            kinesis_client.put_record(
+                StreamName=stream,
+                Data=json.dumps(record, separators=(",", ":")).encode("utf-8"),
+                PartitionKey=record["ID"],
+            )
+            sent += 1
+            print(json.dumps({"status": "sent", "id": record["ID"], "severity": record["Severity"]}))
+            if delay_seconds:
+                time.sleep(delay_seconds)
+        except Exception as exc:
+            failed += 1
+            print(json.dumps({"status": "failed", "row": row_number, "error": str(exc)}))
+    return sent, failed
 
-            # Simple date casting:
-            start_time_raw = parser.parse(json_load['Start_Time'])
-            start_time_iso = start_time_raw.isoformat()
-            json_load.update({'Start_Time':start_time_iso})
 
-            end_time_raw = parser.parse(json_load['End_Time'])
-            end_time_iso = end_time_raw.isoformat()
-            json_load.update({'End_Time':end_time_iso})
+def main():
+    args = parse_args()
+    session = boto3.Session(region_name=args.region)
+    s3_client = session.client("s3")
+    kinesis_client = session.client("kinesis")
 
-            weather_time_raw = parser.parse(json_load['Weather_Timestamp'])
-            weather_time_iso = weather_time_raw.isoformat()
-            json_load.update({'Weather_Timestamp':weather_time_iso})
+    total_sent = 0
+    total_failed = 0
+    for replay_number in range(1, args.repeat + 1):
+        sent, failed = replay_once(
+            s3_client, kinesis_client, args.bucket, args.key, args.stream, args.delay_seconds
+        )
+        total_sent += sent
+        total_failed += failed
+        print(json.dumps({"replay": replay_number, "sent": sent, "failed": failed}))
 
-            # Adding fake txn ts:
-            json_load['Txn_Timestamp'] = datetime.now().isoformat()
+    if total_failed:
+        raise SystemExit(f"Replay completed with failures: sent={total_sent}, failed={total_failed}")
 
-            # Write to Kinesis Streams:
-            response = kinesis_client.put_record(StreamName=kinesis_stream_name,
-                                                 Data=json.dumps(json_load, indent=4),
-                                                 PartitionKey=str(json_load[streaming_partition_key]))
-            print(response)
 
-            # Adding a temporary pause, for demo-purposes:
-            sleep(0.250)
-
-        except Exception as e:
-            print('Error: {}'.format(e))
-
-# Run stream:
-# s3://us-accidents-raw-useast1-274614244619-dev/raw_us_accident_100samples/US_Accidents_Dec20_updated_100samples.csv
-for i in range(0,3):
-    stream_data_simulator(input_s3_bucket="us-accidents-raw-useast1-274614244619-dev",
-                          input_s3_key="raw_us_accident_100samples/US_Accidents_Dec20_updated_100samples.csv")
-
+if __name__ == "__main__":
+    main()
