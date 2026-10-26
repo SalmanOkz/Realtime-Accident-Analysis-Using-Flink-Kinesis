@@ -39,3 +39,24 @@ The complete deployable environment is defined in [`data/infra/`](data/infra/REA
 Firehose consumes the Flink-enriched stream, so the real-time Lambda path and the historical Athena/Grafana path analyze the same processed events.
 
 For complete Windows installation, AWS authentication, deployment, Flink Studio, verification, troubleshooting, and cleanup instructions, follow [`SETUP_AND_RUN_GUIDE.md`](SETUP_AND_RUN_GUIDE.md).
+
+## Documentation guide
+
+Choose the guide that matches your task:
+
+| Goal | Start here |
+| --- | --- |
+| Understand the project and its components | [Project explanation](PROJECT_EXPLANATION.md) |
+| Follow the architecture and event flow | [Architecture workflow](ARCHITECTURE_WORKFLOW.md) |
+| Install tools, configure AWS, and run the demo | [Setup and run guide](SETUP_AND_RUN_GUIDE.md) |
+| Deploy supporting infrastructure with Terraform | [Infrastructure README](data/infra/README.md) |
+| Find operational commands | [Command reference](COMMAND_REFERENCE.md) |
+| Review production considerations | [Production readiness and Terraform](PRODUCTION_READINESS_AND_TERRAFORM.md) |
+
+### Deployment boundaries
+
+Terraform provisions the supporting AWS infrastructure and generates environment-specific Flink SQL. **Flink Studio notebook creation and SQL execution remain manual steps.** Grafana access and dashboards also require configuration after workspace creation. Follow the infrastructure README for these boundaries and the teardown procedure.
+
+### Interpreting the demo
+
+The producer replays accident records from a sample CSV to simulate a stream. The project demonstrates streaming architecture; it is not a live accident-detection service. Deployment instructions describe the intended setup, rather than a benchmark or proof of production readiness.
